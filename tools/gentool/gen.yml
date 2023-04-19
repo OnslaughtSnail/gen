@@ -4,8 +4,8 @@ database:
   dsn : "user:pass@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local"
   # input mysql or postgres or sqlite or sqlserver. consult[https://gorm.io/docs/connecting_to_the_database.html]
   db  : "mysql"
-  # enter the required data table or leave it blank.You can input : 
-  # tables  : 
+  # enter the required data table or leave it blank.You can input :
+  # tables  :
   #   - orders
   #   - users
   #   - goods
@@ -30,3 +30,5 @@ database:
   fieldWithTypeTag  : false
   # detect integer field's unsigned type, adjust generated data type
   fieldSignable  : false
+  # detect database schema
+  schema : "public"

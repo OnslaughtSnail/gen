@@ -47,6 +47,7 @@ type CmdParams struct {
 	FieldWithIndexTag bool     `yaml:"fieldWithIndexTag"` // generate field with gorm index tag
 	FieldWithTypeTag  bool     `yaml:"fieldWithTypeTag"`  // generate field with gorm column type tag
 	FieldSignable     bool     `yaml:"fieldSignable"`     // detect integer field's unsigned type, adjust generated data type
+	Schema            string   `yaml:"schema"`            // database Schema
 }
 
 func (c *CmdParams) revise() *CmdParams {
@@ -104,18 +105,25 @@ func connectDB(t DBType, dsn string) (*gorm.DB, error) {
 }
 
 // genModels is gorm/gen generated models
-func genModels(g *gen.Generator, db *gorm.DB, tables []string) (models []interface{}, err error) {
+func genModels(g *gen.Generator, db *gorm.DB, tables []string, dbType, schema string) (models []interface{}, err error) {
+	var tablesList []string
 	if len(tables) == 0 {
 		// Execute tasks for all tables in the database
-		tables, err = db.Migrator().GetTables()
+		tablesList, err = db.Migrator().GetTables()
 		if err != nil {
 			return nil, fmt.Errorf("GORM migrator get all tables fail: %w", err)
 		}
+	} else {
+		tablesList = tables
 	}
-
+	if DBType(dbType) == dbPostgres {
+		for i := range tablesList {
+			tablesList[i] = fmt.Sprintf("%s.%s", schema, tablesList[i])
+		}
+	}
 	// Execute some data table tasks
-	models = make([]interface{}, len(tables))
-	for i, tableName := range tables {
+	models = make([]interface{}, len(tablesList))
+	for i, tableName := range tablesList {
 		models[i] = g.GenerateModel(tableName)
 	}
 	return models, nil
@@ -154,6 +162,7 @@ func argParse() *CmdParams {
 	fieldWithIndexTag := flag.Bool("fieldWithIndexTag", false, "generate field with gorm index tag")
 	fieldWithTypeTag := flag.Bool("fieldWithTypeTag", false, "generate field with gorm column type tag")
 	fieldSignable := flag.Bool("fieldSignable", false, "detect integer field's unsigned type, adjust generated data type")
+	schema := flag.String("schema", "public", "detect database schema")
 	flag.Parse()
 
 	if *genPath != "" { //use yml config
@@ -201,6 +210,7 @@ func argParse() *CmdParams {
 	if *fieldSignable {
 		cmdParse.FieldSignable = *fieldSignable
 	}
+	cmdParse.Schema = *schema
 	return &cmdParse
 }
 
@@ -227,14 +237,14 @@ func main() {
 		FieldWithTypeTag:  config.FieldWithTypeTag,
 		FieldSignable:     config.FieldSignable,
 	})
-
+	if DBType(config.DB) == dbPostgres {
+		db.Exec(fmt.Sprintf("SET search_path TO %s", config.Schema))
+	}
 	g.UseDB(db)
-
-	models, err := genModels(g, db, config.Tables)
+	models, err := genModels(g, db, config.Tables, config.DB, config.Schema)
 	if err != nil {
 		log.Fatalln("get tables info fail:", err)
 	}
-
 	if !config.OnlyModel {
 		g.ApplyBasic(models...)
 	}
